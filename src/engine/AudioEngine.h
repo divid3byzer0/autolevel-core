@@ -136,75 +136,132 @@ public:
         return m_engine.getVisualState();
     }
 
-    void setParam(const std::string& id, float value) {
-        if (id == "target_lufs") m_targetLufs.store(std::clamp(value, -20.0f, -6.0f));
-        else if (id == "max_boost") m_maxBoost.store(std::clamp(value, 0.0f, 18.0f));
-        else if (id == "max_cut") m_maxCut.store(std::clamp(value, 0.0f, 18.0f));
-        else if (id == "level_response") m_levelResponse.store(std::clamp(value, 0.0f, 1.0f));
-        else if (id == "slew_speed") m_slewSpeed.store(static_cast<int>(value));
-        else if (id == "compression_amount") m_compressionAmount.store(std::clamp(value, 0.0f, 1.0f));
-        else if (id == "tone_slope") m_toneSlope.store(std::clamp(value, -3.0f, 0.0f));
-        else if (id == "mbc_attack_ms") m_mbcAttackMs.store(std::clamp(value,
-            dsp::MBCParams::MIN_ATTACK_MS, dsp::MBCParams::MAX_ATTACK_MS));
-        else if (id == "mbc_release_ms") m_mbcReleaseMs.store(std::clamp(value,
-            dsp::MBCParams::MIN_RELEASE_MS, dsp::MBCParams::MAX_RELEASE_MS));
-        else if (id == "mbc_detector_rms") m_mbcDetectorRms.store(std::clamp(value, 0.0f, 1.0f));
-        else if (id == "mbc_auto_release") m_mbcAutoRelease.store(value > 0.5f);
-        else if (id == "air_exciter") m_airExciter.store(static_cast<int>(value));
-        else if (id == "post_mbc_gain") m_postMbcGain.store(std::clamp(value, -24.0f, 24.0f));
-        else if (id == "hpf_freq") {
-            if (value <= 0.0f) m_hpfFreq.store(0.0f);
-            else m_hpfFreq.store(std::clamp(value, 20.0f, 50.0f));
-        }
-        else if (id == "ceiling_db") m_ceilingDb.store(std::clamp(value, -3.0f, 0.0f));
-        else if (id == "freeze_breakdowns") m_freezeBreakdowns.store(value > 0.5f);
-        else if (id == "breakdown_threshold_lu") m_breakdownThresholdLU.store(std::clamp(value, 3.0f, 15.0f));
-        else if (id == "bypass") m_bypass.store(value > 0.5f);
-        else if (id.rfind("custom_band_", 0) == 0) {
-            try {
-                int b = std::stoi(id.substr(12));
-                if (b >= 0 && b < 6) m_customOffsets[b].store(std::clamp(value, -12.0f, 12.0f));
-            } catch (...) {}
-        }
-        else if (id.rfind("pre_eq_band_", 0) == 0) {
-            try {
-                int b = std::stoi(id.substr(12));
-                if (b >= 0 && b < 6) m_preEqGains[b].store(std::clamp(value, -12.0f, 12.0f));
-            } catch (...) {}
+    /**
+     * Every parameter, for callers that cannot use the string IDs below - a plugin's audio
+     * thread, which must not allocate. Order is the box's preset field order; per-band
+     * parameters are consecutive (CUSTOM_BAND_0 + b, PRE_EQ_BAND_0 + b).
+     */
+    enum class Param : int {
+        TARGET_LUFS, MAX_BOOST, MAX_CUT, LEVEL_RESPONSE, SLEW_SPEED, COMPRESSION_AMOUNT,
+        TONE_SLOPE, MBC_ATTACK_MS, MBC_RELEASE_MS, MBC_DETECTOR_RMS, MBC_AUTO_RELEASE,
+        AIR_EXCITER, POST_MBC_GAIN, HPF_FREQ, CEILING_DB, FREEZE_BREAKDOWNS,
+        BREAKDOWN_THRESHOLD_LU, BYPASS,
+        CUSTOM_BAND_0, CUSTOM_BAND_1, CUSTOM_BAND_2, CUSTOM_BAND_3, CUSTOM_BAND_4, CUSTOM_BAND_5,
+        PRE_EQ_BAND_0, PRE_EQ_BAND_1, PRE_EQ_BAND_2, PRE_EQ_BAND_3, PRE_EQ_BAND_4, PRE_EQ_BAND_5,
+        COUNT
+    };
+    static constexpr int PARAM_COUNT = static_cast<int>(Param::COUNT);
+
+    /** The string ID of a parameter, as used by setParam(string), the web API and presets. */
+    static constexpr const char* paramId(Param p) noexcept {
+        constexpr const char* ids[PARAM_COUNT] = {
+            "target_lufs", "max_boost", "max_cut", "level_response", "slew_speed",
+            "compression_amount", "tone_slope", "mbc_attack_ms", "mbc_release_ms",
+            "mbc_detector_rms", "mbc_auto_release", "air_exciter", "post_mbc_gain", "hpf_freq",
+            "ceiling_db", "freeze_breakdowns", "breakdown_threshold_lu", "bypass",
+            "custom_band_0", "custom_band_1", "custom_band_2", "custom_band_3", "custom_band_4",
+            "custom_band_5",
+            "pre_eq_band_0", "pre_eq_band_1", "pre_eq_band_2", "pre_eq_band_3", "pre_eq_band_4",
+            "pre_eq_band_5"
+        };
+        const int i = static_cast<int>(p);
+        return (i >= 0 && i < PARAM_COUNT) ? ids[i] : "";
+    }
+
+    /** Allocation-free, lock-free: safe on an audio thread. Clamps exactly as setParam(string). */
+    void setParam(Param p, float value) noexcept {
+        const int i = static_cast<int>(p);
+        const int c0 = static_cast<int>(Param::CUSTOM_BAND_0);
+        const int e0 = static_cast<int>(Param::PRE_EQ_BAND_0);
+        if (i >= c0 && i < c0 + 6) { m_customOffsets[i - c0].store(std::clamp(value, -12.0f, 12.0f)); return; }
+        if (i >= e0 && i < e0 + 6) { m_preEqGains[i - e0].store(std::clamp(value, -12.0f, 12.0f)); return; }
+        switch (p) {
+            case Param::TARGET_LUFS: m_targetLufs.store(std::clamp(value, -20.0f, -6.0f)); break;
+            case Param::MAX_BOOST: m_maxBoost.store(std::clamp(value, 0.0f, 18.0f)); break;
+            case Param::MAX_CUT: m_maxCut.store(std::clamp(value, 0.0f, 18.0f)); break;
+            case Param::LEVEL_RESPONSE: m_levelResponse.store(std::clamp(value, 0.0f, 1.0f)); break;
+            case Param::SLEW_SPEED: m_slewSpeed.store(static_cast<int>(value)); break;
+            case Param::COMPRESSION_AMOUNT: m_compressionAmount.store(std::clamp(value, 0.0f, 1.0f)); break;
+            case Param::TONE_SLOPE: m_toneSlope.store(std::clamp(value, -3.0f, 0.0f)); break;
+            case Param::MBC_ATTACK_MS: m_mbcAttackMs.store(std::clamp(value,
+                dsp::MBCParams::MIN_ATTACK_MS, dsp::MBCParams::MAX_ATTACK_MS)); break;
+            case Param::MBC_RELEASE_MS: m_mbcReleaseMs.store(std::clamp(value,
+                dsp::MBCParams::MIN_RELEASE_MS, dsp::MBCParams::MAX_RELEASE_MS)); break;
+            case Param::MBC_DETECTOR_RMS: m_mbcDetectorRms.store(std::clamp(value, 0.0f, 1.0f)); break;
+            case Param::MBC_AUTO_RELEASE: m_mbcAutoRelease.store(value > 0.5f); break;
+            case Param::AIR_EXCITER: m_airExciter.store(static_cast<int>(value)); break;
+            case Param::POST_MBC_GAIN: m_postMbcGain.store(std::clamp(value, -24.0f, 24.0f)); break;
+            case Param::HPF_FREQ:
+                if (value <= 0.0f) m_hpfFreq.store(0.0f);
+                else m_hpfFreq.store(std::clamp(value, 20.0f, 50.0f));
+                break;
+            case Param::CEILING_DB: m_ceilingDb.store(std::clamp(value, -3.0f, 0.0f)); break;
+            case Param::FREEZE_BREAKDOWNS: m_freezeBreakdowns.store(value > 0.5f); break;
+            case Param::BREAKDOWN_THRESHOLD_LU: m_breakdownThresholdLU.store(std::clamp(value, 3.0f, 15.0f)); break;
+            case Param::BYPASS: m_bypass.store(value > 0.5f); break;
+            default: break;
         }
     }
 
+    float getParam(Param p) const noexcept {
+        const int i = static_cast<int>(p);
+        const int c0 = static_cast<int>(Param::CUSTOM_BAND_0);
+        const int e0 = static_cast<int>(Param::PRE_EQ_BAND_0);
+        if (i >= c0 && i < c0 + 6) return m_customOffsets[i - c0].load();
+        if (i >= e0 && i < e0 + 6) return m_preEqGains[i - e0].load();
+        switch (p) {
+            case Param::TARGET_LUFS: return m_targetLufs.load();
+            case Param::MAX_BOOST: return m_maxBoost.load();
+            case Param::MAX_CUT: return m_maxCut.load();
+            case Param::LEVEL_RESPONSE: return m_levelResponse.load();
+            case Param::SLEW_SPEED: return static_cast<float>(m_slewSpeed.load());
+            case Param::COMPRESSION_AMOUNT: return m_compressionAmount.load();
+            case Param::TONE_SLOPE: return m_toneSlope.load();
+            case Param::MBC_ATTACK_MS: return m_mbcAttackMs.load();
+            case Param::MBC_RELEASE_MS: return m_mbcReleaseMs.load();
+            case Param::MBC_DETECTOR_RMS: return m_mbcDetectorRms.load();
+            case Param::MBC_AUTO_RELEASE: return m_mbcAutoRelease.load() ? 1.0f : 0.0f;
+            case Param::AIR_EXCITER: return static_cast<float>(m_airExciter.load());
+            case Param::POST_MBC_GAIN: return m_postMbcGain.load();
+            case Param::HPF_FREQ: return m_hpfFreq.load();
+            case Param::CEILING_DB: return m_ceilingDb.load();
+            case Param::FREEZE_BREAKDOWNS: return m_freezeBreakdowns.load() ? 1.0f : 0.0f;
+            case Param::BREAKDOWN_THRESHOLD_LU: return m_breakdownThresholdLU.load();
+            case Param::BYPASS: return m_bypass.load() ? 1.0f : 0.0f;
+            default: return 0.0f;
+        }
+    }
+
+    /**
+     * The parameter a string ID names. Per-band IDs keep their long-standing parse: the text
+     * after the prefix goes through std::stoi, so "custom_band_2" and "custom_band_2x" both
+     * mean band 2, and anything unparsable or out of 0-5 names nothing.
+     */
+    static std::optional<Param> paramFromId(const std::string& id) {
+        for (int i = 0; i < static_cast<int>(Param::CUSTOM_BAND_0); ++i) {
+            if (id == paramId(static_cast<Param>(i))) return static_cast<Param>(i);
+        }
+        auto band = [&](const char* prefix, Param first) -> std::optional<Param> {
+            const std::string pre(prefix);
+            if (id.rfind(pre, 0) != 0) return std::nullopt;
+            try {
+                int b = std::stoi(id.substr(pre.size()));
+                if (b >= 0 && b < 6) return static_cast<Param>(static_cast<int>(first) + b);
+            } catch (...) {}
+            return std::nullopt;
+        };
+        if (auto p = band("custom_band_", Param::CUSTOM_BAND_0)) return p;
+        return band("pre_eq_band_", Param::PRE_EQ_BAND_0);
+    }
+
+    /** Unknown IDs are ignored. */
+    void setParam(const std::string& id, float value) {
+        if (auto p = paramFromId(id)) setParam(*p, value);
+    }
+
+    /** 0 for unknown IDs. */
     float getParam(const std::string& id) const {
-        if (id == "target_lufs") return m_targetLufs.load();
-        if (id == "max_boost") return m_maxBoost.load();
-        if (id == "max_cut") return m_maxCut.load();
-        if (id == "level_response") return m_levelResponse.load();
-        if (id == "slew_speed") return static_cast<float>(m_slewSpeed.load());
-        if (id == "compression_amount") return m_compressionAmount.load();
-        if (id == "tone_slope") return m_toneSlope.load();
-        if (id == "mbc_attack_ms") return m_mbcAttackMs.load();
-        if (id == "mbc_release_ms") return m_mbcReleaseMs.load();
-        if (id == "mbc_detector_rms") return m_mbcDetectorRms.load();
-        if (id == "mbc_auto_release") return m_mbcAutoRelease.load() ? 1.0f : 0.0f;
-        if (id == "air_exciter") return static_cast<float>(m_airExciter.load());
-        if (id == "post_mbc_gain") return m_postMbcGain.load();
-        if (id == "hpf_freq") return m_hpfFreq.load();
-        if (id == "ceiling_db") return m_ceilingDb.load();
-        if (id == "freeze_breakdowns") return m_freezeBreakdowns.load() ? 1.0f : 0.0f;
-        if (id == "breakdown_threshold_lu") return m_breakdownThresholdLU.load();
-        if (id == "bypass") return m_bypass.load() ? 1.0f : 0.0f;
-        if (id.rfind("custom_band_", 0) == 0) {
-            try {
-                int b = std::stoi(id.substr(12));
-                if (b >= 0 && b < 6) return m_customOffsets[b].load();
-            } catch (...) {}
-        }
-        if (id.rfind("pre_eq_band_", 0) == 0) {
-            try {
-                int b = std::stoi(id.substr(12));
-                if (b >= 0 && b < 6) return m_preEqGains[b].load();
-            } catch (...) {}
-        }
+        if (auto p = paramFromId(id)) return getParam(*p);
         return 0.0f;
     }
 

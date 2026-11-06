@@ -1278,6 +1278,35 @@ void testLockFreeDoubleBufferedVisualState() {
     std::cout << "  -> PASS: Double-buffered visual state and lock-free reset verified!" << std::endl;
 }
 
+void testTypedParamApiMatchesStringApi() {
+    std::cout << "[TEST] Typed setParam(Param) matches setParam(string) for every parameter..." << std::endl;
+    using P = autolevel::AudioEngine::Param;
+    const float probes[] = { -100.0f, -24.0f, -12.5f, -3.0f, -0.4f, 0.0f, 0.3f, 0.6f, 1.0f, 2.0f,
+                             3.0f, 7.0f, 19.0f, 45.0f, 60.0f, 250.0f, 5000.0f };
+    for (int i = 0; i < autolevel::AudioEngine::PARAM_COUNT; ++i) {
+        const P p = static_cast<P>(i);
+        const std::string id = autolevel::AudioEngine::paramId(p);
+        assert(!id.empty());
+        auto back = autolevel::AudioEngine::paramFromId(id);
+        assert(back && *back == p);
+        for (float v : probes) {
+            autolevel::AudioEngine a, b;
+            a.setParam(p, v);
+            b.setParam(id, v);
+            assert(a.getParam(p) == b.getParam(id));
+            assert(a.getStateJson() == b.getStateJson());
+        }
+    }
+    // Long-standing per-band parse kept: trailing junk after the index is tolerated,
+    // unparsable or out-of-range indices name nothing.
+    assert(autolevel::AudioEngine::paramFromId("custom_band_2x") == P::CUSTOM_BAND_2);
+    assert(!autolevel::AudioEngine::paramFromId("custom_band_6"));
+    assert(!autolevel::AudioEngine::paramFromId("pre_eq_band_x"));
+    assert(!autolevel::AudioEngine::paramFromId("nonsense"));
+    std::cout << "  -> PASS: " << autolevel::AudioEngine::PARAM_COUNT
+              << " parameters, typed and string paths identical." << std::endl;
+}
+
 int main() {
     std::cout << "============================================" << std::endl;
     std::cout << "   AutoLevel DJ DSP Unit Tests (Android Spec)" << std::endl;
@@ -1308,6 +1337,7 @@ int main() {
     testPresetSaveLoadRoundTrip();
     testInputSanitizerAntiNan();
     testLockFreeDoubleBufferedVisualState();
+    testTypedParamApiMatchesStringApi();
 
     std::cout << "============================================" << std::endl;
     std::cout << "   ALL DSP TESTS PASSED WITH 100% ACCURACY! " << std::endl;
