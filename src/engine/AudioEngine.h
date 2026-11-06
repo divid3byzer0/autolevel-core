@@ -176,8 +176,8 @@ public:
         const int i = static_cast<int>(p);
         const int c0 = static_cast<int>(Param::CUSTOM_BAND_0);
         const int e0 = static_cast<int>(Param::PRE_EQ_BAND_0);
-        if (i >= c0 && i < c0 + 6) { m_customOffsets[i - c0].store(std::clamp(value, -12.0f, 12.0f)); return; }
-        if (i >= e0 && i < e0 + 6) { m_preEqGains[i - e0].store(std::clamp(value, -12.0f, 12.0f)); return; }
+        if (i >= c0 && i < c0 + 6) { m_customOffsets[static_cast<size_t>(i - c0)].store(std::clamp(value, -12.0f, 12.0f)); return; }
+        if (i >= e0 && i < e0 + 6) { m_preEqGains[static_cast<size_t>(i - e0)].store(std::clamp(value, -12.0f, 12.0f)); return; }
         switch (p) {
             case Param::TARGET_LUFS: m_targetLufs.store(std::clamp(value, -20.0f, -6.0f)); break;
             case Param::MAX_BOOST: m_maxBoost.store(std::clamp(value, 0.0f, 18.0f)); break;
@@ -202,7 +202,11 @@ public:
             case Param::FREEZE_BREAKDOWNS: m_freezeBreakdowns.store(value > 0.5f); break;
             case Param::BREAKDOWN_THRESHOLD_LU: m_breakdownThresholdLU.store(std::clamp(value, 3.0f, 15.0f)); break;
             case Param::BYPASS: m_bypass.store(value > 0.5f); break;
-            default: break;
+            case Param::CUSTOM_BAND_0: case Param::CUSTOM_BAND_1: case Param::CUSTOM_BAND_2:
+            case Param::CUSTOM_BAND_3: case Param::CUSTOM_BAND_4: case Param::CUSTOM_BAND_5:
+            case Param::PRE_EQ_BAND_0: case Param::PRE_EQ_BAND_1: case Param::PRE_EQ_BAND_2:
+            case Param::PRE_EQ_BAND_3: case Param::PRE_EQ_BAND_4: case Param::PRE_EQ_BAND_5:
+            case Param::COUNT: break; // bands handled above
         }
     }
 
@@ -210,8 +214,8 @@ public:
         const int i = static_cast<int>(p);
         const int c0 = static_cast<int>(Param::CUSTOM_BAND_0);
         const int e0 = static_cast<int>(Param::PRE_EQ_BAND_0);
-        if (i >= c0 && i < c0 + 6) return m_customOffsets[i - c0].load();
-        if (i >= e0 && i < e0 + 6) return m_preEqGains[i - e0].load();
+        if (i >= c0 && i < c0 + 6) return m_customOffsets[static_cast<size_t>(i - c0)].load();
+        if (i >= e0 && i < e0 + 6) return m_preEqGains[static_cast<size_t>(i - e0)].load();
         switch (p) {
             case Param::TARGET_LUFS: return m_targetLufs.load();
             case Param::MAX_BOOST: return m_maxBoost.load();
@@ -231,8 +235,13 @@ public:
             case Param::FREEZE_BREAKDOWNS: return m_freezeBreakdowns.load() ? 1.0f : 0.0f;
             case Param::BREAKDOWN_THRESHOLD_LU: return m_breakdownThresholdLU.load();
             case Param::BYPASS: return m_bypass.load() ? 1.0f : 0.0f;
-            default: return 0.0f;
+            case Param::CUSTOM_BAND_0: case Param::CUSTOM_BAND_1: case Param::CUSTOM_BAND_2:
+            case Param::CUSTOM_BAND_3: case Param::CUSTOM_BAND_4: case Param::CUSTOM_BAND_5:
+            case Param::PRE_EQ_BAND_0: case Param::PRE_EQ_BAND_1: case Param::PRE_EQ_BAND_2:
+            case Param::PRE_EQ_BAND_3: case Param::PRE_EQ_BAND_4: case Param::PRE_EQ_BAND_5:
+            case Param::COUNT: break; // bands handled above
         }
+        return 0.0f;
     }
 
     /**

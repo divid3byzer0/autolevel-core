@@ -48,3 +48,20 @@ IMPORTANT when measuring the crossover: `compressionAmount` must be at least
 returns without touching the buffer, and any measurement becomes a comparison of
 the input against itself. That is exactly how the original test passed while
 measuring nothing.
+
+## box_render.cpp
+
+Renders interleaved stereo float32 through the engine exactly as the box runs it (48 kHz,
+256-frame blocks, defaults or a preset), and compares two renders. This is how the plugin's
+output is checked against the box built with the box's own flags.
+
+    c++ -std=gnu++17 -O3 -ffast-math -fno-finite-math-only -I src/dsp -I src/engine \
+        tools/box_render.cpp -o /tmp/box_render
+    /tmp/box_render --make-input /tmp/in.f32 60
+    /tmp/box_render /tmp/in.f32 /tmp/box.f32
+    # plugin side (autolevel-dj-vst): build-dir/plugin_test --render /tmp/in.f32 /tmp/plugin.f32
+    /tmp/box_render --compare /tmp/box.f32 /tmp/plugin.f32
+
+Result on 2026-11-06 (Apple Silicon, 60 s program): identical to the plugin when both are
+built without fast-math; with the box's -ffast-math the largest difference is -138 dBFS,
+below 24-bit resolution.

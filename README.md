@@ -16,7 +16,7 @@ reaches both. Header-only C++17, no dependencies.
 | `src/dsp/*.h` | The individual stages |
 | `src/engine/AudioEngine.h` | Thread-safe parameter store over the chain: string parameter IDs with their ranges, input sanitising, and the preset JSON format (`getStateJson` / `loadStateFromJson`, including older-preset migration) |
 | `tests/dsp_test.cpp` | Unit tests for the chain |
-| `tools/` | Diagnostic programs: reset race (TSan), benchmark, crossover probe; see `tools/README.md` |
+| `tools/` | Diagnostic programs: reset race (TSan), benchmark, crossover probe, and `box_render` (renders audio exactly as the box does, to compare another host against it); see `tools/README.md` |
 
 ## Using it
 
