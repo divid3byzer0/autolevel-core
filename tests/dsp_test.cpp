@@ -1090,7 +1090,7 @@ void testMbcHasNoMakeupGain() {
     constexpr size_t N = 48000;
     std::vector<float> left(N), right(N);
     for (size_t i = 0; i < N; ++i) {
-        left[i] = right[i] = 0.3162f * std::sin(2.0 * M_PI * 1000.0 * i / 48000.0);
+        left[i] = right[i] = 0.3162f * std::sin(2.0 * TEST_PI * 1000.0 * i / 48000.0);
     }
     mbc.process(left.data(), right.data(), N, params);
 
