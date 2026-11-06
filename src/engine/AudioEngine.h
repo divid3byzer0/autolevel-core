@@ -74,6 +74,9 @@ public:
         m_engine.reset();
     }
 
+    /** How far the chain delays the audio, in frames (the limiter's lookahead, ~2.1 ms). */
+    int latencyFrames() const noexcept { return m_engine.latencyFrames(); }
+
     // Audio processing callback - thread-safe, called from high-priority audio thread
     void process(const float* inL, const float* inR, float* outL, float* outR, size_t numSamples) {
         if (numSamples == 0) return;
